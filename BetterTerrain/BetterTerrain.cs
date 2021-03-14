@@ -15,7 +15,7 @@ namespace BetterTerrain
     {
         // major and minor version of BetterTerrain
         static byte major = 0;
-        static byte minor = 9;
+        static byte minor = 10;
 
         // apply patches
         void Awake()
@@ -63,6 +63,16 @@ namespace BetterTerrain
 
         static bool first_load = false;
         static bool loading = false;
+        static List<Vector2i> zones_to_save = new List<Vector2i>();
+
+        [HarmonyPatch(typeof(ZoneSystem), "SpawnLocation")]
+        [HarmonyPrefix]
+        static void SpawnLocation_Postfix(Vector3 pos)
+        {
+            Vector2i zone = ZoneSystem.instance.GetZone(pos);
+
+            zones_to_save.Add(zone);
+        }
 
         [HarmonyPatch(typeof(ZNet), "LoadWorld")]
         [HarmonyPrefix]
@@ -314,9 +324,9 @@ namespace BetterTerrain
             }
         }
 
-        [HarmonyPatch(typeof(Heightmap), "ApplyModifier")]
+        [HarmonyPatch(typeof(Heightmap), "ApplyModifiers")]
         [HarmonyPostfix]
-        static void ApplyModifier_Postfix(Heightmap __instance, int ___m_width, List<float> ___m_heights, Texture2D ___m_clearedMask)
+        static void ApplyModifiers_Postfix(Heightmap __instance, int ___m_width, ref List<float> ___m_heights, ref Texture2D ___m_clearedMask, HeightmapBuilder.HMBuildData ___m_buildData)
         {
             // don't run this code before the ZoneSystem is initialized
             if (ZoneSystem.instance == null)
@@ -324,9 +334,8 @@ namespace BetterTerrain
                 return;
             }
 
-            // if this heightmap's zone has been loaded, save it's info in zone_info
             Vector2i zone = ZoneSystem.instance.GetZone(__instance.transform.position);
-            if (zone_info.ContainsKey(zone) && zone_info[zone].game_object != null && zone_info[zone].game_object == __instance.gameObject)
+            if (zones_to_save.Contains(zone) && zone_info.ContainsKey(zone) && zone_info[zone].game_object != null && zone_info[zone].game_object == __instance.gameObject)
             {
                 zone_info[zone].heights = ___m_heights;
                 zone_info[zone].colors = ___m_clearedMask.GetPixels();
@@ -336,18 +345,49 @@ namespace BetterTerrain
             }
         }
 
+        [HarmonyPatch(typeof(Heightmap), "ApplyModifier")]
+        [HarmonyPostfix]
+        static void ApplyModifier_Postfix(TerrainModifier modifier, Heightmap __instance, int ___m_width, List<float> ___m_heights, Texture2D ___m_clearedMask)
+        {
+            // don't run this code before the ZoneSystem is initialized
+            if (ZoneSystem.instance == null)
+            {
+                return;
+            }
+
+            // if this heightmap's zone has been loaded, save it's info in zone_info
+            Vector2i zone = ZoneSystem.instance.GetZone(modifier.transform.position);
+            if (zone_info.ContainsKey(zone) && zone_info[zone].game_object != null && zone_info[zone].game_object == __instance.gameObject)
+            {
+                zones_to_save.Add(zone);
+            }
+        }
+
         [HarmonyPatch(typeof(TerrainModifier), "PokeHeightmaps")]
         [HarmonyPrefix]
         static bool PokeHeightmaps_Prefix(TerrainModifier __instance)
         {
-            tmods_to_remove.Add(__instance);
-            if (loading && !first_load)
+            if (ZoneSystem.instance == null)
             {
-                //UnityEngine.Debug.Log("Skipped");
+                return true;
+            }
+
+            Vector2i zone = ZoneSystem.instance.GetZone(__instance.transform.position);
+            if (loading && zone_info.ContainsKey(zone) && zone_info[zone].saved)
+            {
+                UnityEngine.Debug.Log("Skipped");
+                tmods_to_remove.Add(__instance);
                 __instance.enabled = false;
                 return false;
             }
             return true;
+        }
+
+        [HarmonyPatch(typeof(TerrainModifier), "Awake")]
+        [HarmonyPostfix]
+        static void Awake_Postfix(TerrainModifier __instance)
+        {
+            tmods_to_remove.Add(__instance);
         }
 
         [HarmonyPatch(typeof(ZNetScene), "CreateObject")]
