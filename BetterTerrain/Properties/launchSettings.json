@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "BetterTerrain": {
+      "commandName": "Executable",
+      "executablePath": "D:\\Steam\\steamapps\\common\\Valheim\\valheim.exe",
+      "commandLineArgs": "-world Northernwilds",
+      "workingDirectory": "D:\\Steam\\steamapps\\common\\Valheim",
+      "nativeDebugging": true
+    }
+  }
+}
