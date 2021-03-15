@@ -275,13 +275,13 @@ namespace BetterTerrain
                             {
                                 if (!zone_info.ContainsKey(hmap_zone))
                                 {
-                                    UnityEngine.Debug.Log("Adding Zone: (" + hmap_zone.x + ", " + hmap_zone.y + ")");
+                                    //UnityEngine.Debug.Log("Adding Zone: (" + hmap_zone.x + ", " + hmap_zone.y + ")");
                                     zone_info.Add(hmap_zone, new ZoneInfo());
                                     can_delete = false;
                                 }
                                 if (!zones_to_save.Contains(hmap_zone))
                                 {
-                                    UnityEngine.Debug.Log("Initializing zone: (" + hmap_zone.x + ", " + hmap_zone.y + ")");
+                                    //UnityEngine.Debug.Log("Initializing zone: (" + hmap_zone.x + ", " + hmap_zone.y + ")");
                                     zones_to_save.Add(hmap_zone);
                                     hmap.Regenerate();
                                     can_delete = false;
@@ -290,7 +290,7 @@ namespace BetterTerrain
                         }
                         if (can_delete)
                         {
-                            UnityEngine.Debug.Log("Deleting tmod in zone: (" + zone.x + ", " + zone.y + ")");
+                            //UnityEngine.Debug.Log("Deleting tmod in zone: (" + zone.x + ", " + zone.y + ")");
                             DeleteTMod(modifier);
                             tmods_to_remove.Remove(modifier);
                         }
@@ -352,7 +352,7 @@ namespace BetterTerrain
                 ___m_heights = zone_info[zone].heights;
                 ___m_clearedMask.SetPixels(zone_info[zone].colors);
                 ___m_clearedMask.Apply();
-                UnityEngine.Debug.Log("Loaded Zone (" + zone.x + ", " + zone.y + ")");
+                //UnityEngine.Debug.Log("Loaded Zone (" + zone.x + ", " + zone.y + ")");
             }
         }
 
@@ -370,14 +370,10 @@ namespace BetterTerrain
             if (zones_to_save.Contains(zone) && zone_info.ContainsKey(zone) && zone_info[zone].game_object != null && zone_info[zone].game_object == __instance.gameObject)
             {
                 zone_info[zone].heights = ___m_heights;
-                if (zone_info[zone].base_heights == null)
-                {
-                    UnityEngine.Debug.Log("y");
-                }
                 zone_info[zone].colors = ___m_clearedMask.GetPixels();
                 zone_info[zone].width = ___m_clearedMask.width;
                 zone_info[zone].saved = true;
-                UnityEngine.Debug.Log("Saved zone: (" + zone.x + ", " + zone.y + ")");
+                // UnityEngine.Debug.Log("Saved zone: (" + zone.x + ", " + zone.y + ")");
 
                 /*if (zone_info[zone].base_heights != null)
                 {
