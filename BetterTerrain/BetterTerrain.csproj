@@ -8,6 +8,7 @@
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>D:\Steam\steamapps\common\Valheim\BepInEx\plugins\BetterTerrain\</OutputPath>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,7 +19,7 @@
       <HintPath>..\..\..\BetterTerrain\Libs\assembly_utils.dll</HintPath>
     </Reference>
     <Reference Include="assembly_valheim">
-      <HintPath>..\..\..\BetterTerrain\Libs\assembly_valheim.dll</HintPath>
+      <HintPath>..\..\..\BetterTerrain\Libs\publicized_assemblies\assembly_valheim_publicized.dll</HintPath>
     </Reference>
     <Reference Include="BepInEx">
       <HintPath>..\..\..\BetterTerrain\Libs\BepInEx.dll</HintPath>

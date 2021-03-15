@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace BetterTerrain
 {
-    [BepInPlugin("org.bepinex.plugins.betterterrain", "Better Terrain", "0.1.9.0")]
+    [BepInPlugin("org.bepinex.plugins.betterterrain", "Better Terrain", "0.1.10.0")]
     public class BetterTerrain : BaseUnityPlugin
     {
         // major and minor version of BetterTerrain
@@ -41,6 +41,7 @@ namespace BetterTerrain
 
             public int width;
             public List<float> heights;
+            public List<float> base_heights;
             public Color[] colors;
             public GameObject game_object;
             public bool saved = false;
@@ -60,18 +61,27 @@ namespace BetterTerrain
 
         // TerrainModifiers that have not yet been destroyed, but are scheduled to
         static List<TerrainModifier> tmods_to_remove = new List<TerrainModifier>();
-
-        static bool first_load = false;
+        
+        // whether an object is being created through the ZNetScene
         static bool loading = false;
+
+        // list of zones that should be saved
         static List<Vector2i> zones_to_save = new List<Vector2i>();
 
-        [HarmonyPatch(typeof(ZoneSystem), "SpawnLocation")]
-        [HarmonyPrefix]
-        static void SpawnLocation_Postfix(Vector3 pos)
+        static void DeleteTMod(TerrainModifier modifier)
         {
-            Vector2i zone = ZoneSystem.instance.GetZone(pos);
+            ZNetView znview = modifier.gameObject.GetComponent<ZNetView>();
+            if (znview && znview.GetZDO() != null)
+            {
+                // save TerrainModifier ZDO
+                tm_zdos.Add(znview.GetZDO().Clone());
 
-            zones_to_save.Add(zone);
+                // claim ownership of the TerrainModifier and destroy it
+                znview.ClaimOwnership();
+                ZNetScene.instance.Destroy(modifier.gameObject);
+
+                //UnityEngine.Debug.Log("Destroyed");
+            }
         }
 
         [HarmonyPatch(typeof(ZNet), "LoadWorld")]
@@ -83,11 +93,6 @@ namespace BetterTerrain
             // get world save path
             db_path = ___m_world.GetDBPath();
             db_path = db_path.Substring(0, db_path.Length - 3);
-
-            if (!File.Exists(db_path + ".hmap"))
-            {
-                first_load = true;
-            }
         }
 
         [HarmonyPatch(typeof(ZoneSystem), "Load")]
@@ -156,30 +161,18 @@ namespace BetterTerrain
             return true;
         }
 
-        [HarmonyPatch(typeof(ZNet), "LoadWorld")]
+        [HarmonyPatch(typeof(ZDOMan), "SaveAsync")]
         [HarmonyPrefix]
-        static void LoadWorld_Prefix()
+        static void SaveAsync_Prefix()
         {
-            loading = true;
-        }
-
-        [HarmonyPatch(typeof(ZNet), "Start")]
-        [HarmonyPostfix]
-        static void Start_Postfix()
-        {
-            loading = false;
-        }
-
-        [HarmonyPatch(typeof(ZDOMan), "PrepareSave")]
-        [HarmonyPrefix]
-        static void PrepareSave_Prefix()
-        {
-            loading = true;
             // reinitialize all destroyed TerrainModifiers
             // if they aren't reinitialized before saving, the TerrainModifiers will be removed from the game's save file, and the world will be incompatible with the vanilla game
             foreach (ZDO zdo in tm_zdos)
             {
-                ZDOMan.instance.AddToSector(zdo, zdo.GetSector());
+                if (!ZNetScene.instance.HaveInstance(zdo))
+                {
+                    ZDOMan.instance.AddToSector(zdo, zdo.GetSector());
+                }
             }
         }
 
@@ -192,7 +185,6 @@ namespace BetterTerrain
             {
                 ZDOMan.instance.RemoveFromSector(zdo, zdo.GetSector());
             }
-            loading = false;
         }
 
         // saves zone_info into a .hmap file, see Load_Prefix() for .hmap format details
@@ -247,7 +239,6 @@ namespace BetterTerrain
             // clear any saved world data from memory
             zone_info.Clear();
             tm_zdos.Clear();
-            first_load = false;
         }
 
         [HarmonyPatch(typeof(ZNetScene), "Update")]
@@ -268,35 +259,78 @@ namespace BetterTerrain
             {
                 destroy_tm_timer = 0f;
 
-                int destroyed = 0;
-
-                // go through every TerrainModifier scheduled to be destroyed
+                // if this heightmap's zone has been loaded, save it's info in zone_info
                 for (int i = 0; i < tmods_to_remove.Count; i++)
                 {
-                    TerrainModifier t = tmods_to_remove[i];
-                    if (t != null)
+                    if (tmods_to_remove[i] != null)
                     {
-                        // get the TerrainModifier's ZNetView component, which contains the ZDO we need to save
-                        ZNetView znview = t.gameObject.GetComponent<ZNetView>();
-                        if (znview && znview.GetZDO() != null)
-                        {
-                            // save TerrainModifier ZDO
-                            tm_zdos.Add(znview.GetZDO().Clone());
+                        TerrainModifier modifier = tmods_to_remove[i];
+                        Vector2i zone = ZoneSystem.instance.GetZone(modifier.transform.position);
 
-                            // claim ownership of the TerrainModifier and destroy it
-                            znview.ClaimOwnership();
-                            ZNetScene.instance.Destroy(t.gameObject);
-                            destroyed++;
-                            tmods_to_remove.Remove(t);
+                        bool can_delete = true;
+                        foreach (Heightmap hmap in Heightmap.GetAllHeightmaps())
+                        {
+                            Vector2i hmap_zone = ZoneSystem.instance.GetZone(hmap.transform.position);
+                            if (hmap.TerrainVSModifier(modifier))
+                            {
+                                if (!zone_info.ContainsKey(hmap_zone))
+                                {
+                                    UnityEngine.Debug.Log("Adding Zone: (" + hmap_zone.x + ", " + hmap_zone.y + ")");
+                                    zone_info.Add(hmap_zone, new ZoneInfo());
+                                    can_delete = false;
+                                }
+                                if (!zones_to_save.Contains(hmap_zone))
+                                {
+                                    UnityEngine.Debug.Log("Initializing zone: (" + hmap_zone.x + ", " + hmap_zone.y + ")");
+                                    zones_to_save.Add(hmap_zone);
+                                    hmap.Regenerate();
+                                    can_delete = false;
+                                }
+                            }
+                        }
+                        if (can_delete)
+                        {
+                            UnityEngine.Debug.Log("Deleting tmod in zone: (" + zone.x + ", " + zone.y + ")");
+                            DeleteTMod(modifier);
+                            tmods_to_remove.Remove(modifier);
                         }
                     }
                 }
-                // log number of TerrainModifiers destroyed
-                if (destroyed > 0)
-                {
-                    UnityEngine.Debug.Log("destroyed " + destroyed + " TerrainModifiers");
-                }
             }
+        }
+
+        [HarmonyPatch(typeof(Heightmap), "Generate")]
+        [HarmonyPrefix]
+        static bool Generate_Prefix(Heightmap __instance, int ___m_width, ref List<float> ___m_heights, ref Texture2D ___m_clearedMask, HeightmapBuilder.HMBuildData ___m_buildData)
+        {
+            if (ZoneSystem.instance == null)
+            {
+                return true;
+            }
+            Vector3 position = __instance.transform.position;
+            __instance.Initialize();
+            int num = __instance.m_width + 1;
+            int num2 = num * num;
+
+            if (__instance.m_buildData == null || __instance.m_buildData.m_baseHeights.Count != num2 || __instance.m_buildData.m_center != position || __instance.m_buildData.m_scale != __instance.m_scale || __instance.m_buildData.m_worldGen != WorldGenerator.instance)
+            {
+                __instance.m_buildData = HeightmapBuilder.instance.RequestTerrainSync(position, __instance.m_width, __instance.m_scale, __instance.m_isDistantLod, WorldGenerator.instance);
+                __instance.m_cornerBiomes = __instance.m_buildData.m_cornerBiomes;
+            }
+            for (int i = 0; i < num2; i++)
+            {
+                __instance.m_heights[i] = __instance.m_buildData.m_baseHeights[i];
+            }
+            Color[] pixels = new Color[__instance.m_clearedMask.width * __instance.m_clearedMask.height];
+            __instance.m_clearedMask.SetPixels(pixels);
+
+            __instance.ApplyModifiers();
+            for (int i = 0; i < num2; i++)
+            {
+                __instance.m_buildData.m_baseHeights[i] = __instance.m_heights[i];
+            }
+
+            return false;
         }
 
         [HarmonyPatch(typeof(Heightmap), "ApplyModifiers")]
@@ -316,11 +350,9 @@ namespace BetterTerrain
             if (zone_info.ContainsKey(zone) && zone_info[zone].saved && zone_info[zone].game_object != null && zone_info[zone].game_object == __instance.gameObject)
             {
                 ___m_heights = zone_info[zone].heights;
-                ___m_buildData.m_baseHeights = zone_info[zone].heights;
                 ___m_clearedMask.SetPixels(zone_info[zone].colors);
                 ___m_clearedMask.Apply();
-
-                //UnityEngine.Debug.Log("Loaded Zone (" + zone.x + ", " + zone.y + ")");
+                UnityEngine.Debug.Log("Loaded Zone (" + zone.x + ", " + zone.y + ")");
             }
         }
 
@@ -338,28 +370,19 @@ namespace BetterTerrain
             if (zones_to_save.Contains(zone) && zone_info.ContainsKey(zone) && zone_info[zone].game_object != null && zone_info[zone].game_object == __instance.gameObject)
             {
                 zone_info[zone].heights = ___m_heights;
+                if (zone_info[zone].base_heights == null)
+                {
+                    UnityEngine.Debug.Log("y");
+                }
                 zone_info[zone].colors = ___m_clearedMask.GetPixels();
                 zone_info[zone].width = ___m_clearedMask.width;
                 zone_info[zone].saved = true;
-                //UnityEngine.Debug.Log("Saved Zone (" + zone.x + ", " + zone.y + ")");
-            }
-        }
+                UnityEngine.Debug.Log("Saved zone: (" + zone.x + ", " + zone.y + ")");
 
-        [HarmonyPatch(typeof(Heightmap), "ApplyModifier")]
-        [HarmonyPostfix]
-        static void ApplyModifier_Postfix(TerrainModifier modifier, Heightmap __instance, int ___m_width, List<float> ___m_heights, Texture2D ___m_clearedMask)
-        {
-            // don't run this code before the ZoneSystem is initialized
-            if (ZoneSystem.instance == null)
-            {
-                return;
-            }
-
-            // if this heightmap's zone has been loaded, save it's info in zone_info
-            Vector2i zone = ZoneSystem.instance.GetZone(modifier.transform.position);
-            if (zone_info.ContainsKey(zone) && zone_info[zone].game_object != null && zone_info[zone].game_object == __instance.gameObject)
-            {
-                zones_to_save.Add(zone);
+                /*if (zone_info[zone].base_heights != null)
+                {
+                    ___m_buildData.m_baseHeights = zone_info[zone].base_heights;
+                }*/
             }
         }
 
@@ -375,9 +398,9 @@ namespace BetterTerrain
             Vector2i zone = ZoneSystem.instance.GetZone(__instance.transform.position);
             if (loading && zone_info.ContainsKey(zone) && zone_info[zone].saved)
             {
-                UnityEngine.Debug.Log("Skipped");
-                tmods_to_remove.Add(__instance);
+                //UnityEngine.Debug.Log("Skipped");
                 __instance.enabled = false;
+                DeleteTMod(__instance);
                 return false;
             }
             return true;
@@ -390,15 +413,24 @@ namespace BetterTerrain
             tmods_to_remove.Add(__instance);
         }
 
+        [HarmonyPatch(typeof(TerrainModifier), "OnDestroy")]
+        [HarmonyPrefix]
+        static bool OnDestroy_Prefix(TerrainModifier __instance, List<TerrainModifier> ___m_instances, ref bool ___m_needsSorting)
+        {
+            ___m_instances.Remove(__instance);
+            ___m_needsSorting = true;
+            return false;
+        }
+
         [HarmonyPatch(typeof(ZNetScene), "CreateObject")]
         [HarmonyPrefix]
-        static void Zone_Update_Prefix()
+        static void Create_Prefix()
         {
             loading = true;
         }
         [HarmonyPatch(typeof(ZNetScene), "CreateObject")]
         [HarmonyPostfix]
-        static void Zone_Update_Postfix()
+        static void Create_Postfix()
         {
             loading = false;
         }
