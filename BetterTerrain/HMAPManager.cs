@@ -244,6 +244,7 @@ namespace BetterTerrain
         static public List<ZDO> all_tmod_zdos = new List<ZDO>();
         static public List<ZDO> checked_zdos = new List<ZDO>();
         static public float time_to_update = 1f;
+        static public bool loading_object = false;
     }
 
     class Patches
@@ -262,49 +263,9 @@ namespace BetterTerrain
             HMAPManager.SetHeightmap(zoneID, root.GetComponentInChildren<Heightmap>());
             HMAPManager.CalcTMods(zoneID);
 
-            
             HMAPManager.GetZoneInfo(zoneID).hmap.Regenerate();
-
-            //UnityEngine.Debug.Log("Spawned zone: (" + zoneID.x + ", " + zoneID.y + ")");
         }
 
-        /*[HarmonyPatch(typeof(ZoneSystem), "PokeLocalZone")]
-        [HarmonyPostfix]
-        static void PokeLocalZone_Postfix(ZoneSystem __instance, Vector2i zoneID)
-        {
-            if (!__instance.m_zones.ContainsKey(zoneID))
-            {
-                return;
-            }
-
-            if (!HMAPManager.IsZoneKnown(zoneID))
-            {
-                HMAPManager.zone_info.Add(zoneID, new BetterTerrain.ZoneInfo());
-            }
-
-            foreach (TerrainModifier tmod in __instance.m_zones[zoneID].m_root.GetComponentsInChildren<TerrainModifier>())
-            {
-                HMAPManager.zone_info[zoneID].num_tmods++;
-            }
-            UnityEngine.Debug.Log(HMAPManager.zone_info[zoneID].num_tmods + " TMods in (" + zoneID.x + ", " + zoneID.y + ")");
-        }*/
-
-        /*[HarmonyPatch(typeof(ZNetScene), "CreateObjectsSorted")]
-        [HarmonyPostfix]
-        static void CreateObjectsSorted_Postfix(List<ZDO> currentNearObjects, int maxCreatedPerFrame, ref int created)
-        {
-            if (created > 0)
-            {
-                HMAPManager.can_save = false;
-                return;
-            }
-            if (!HMAPManager.can_save)
-            {
-                TModManager.UpdateTMods();
-                TModManager.DeleteTMods();
-            }
-            HMAPManager.can_save = true;
-        }*/
         [HarmonyPatch(typeof(ZNetScene), "CreateDestroyObjects")]
         [HarmonyPostfix]
         static void CreateDestroyObjects_Postfix(ZNetScene __instance)
@@ -471,9 +432,28 @@ namespace BetterTerrain
 
                 // mark modifier as applied
                 zone.applied_tmods.Add(modifier);
+
+                if (zone.saved && HMAPManager.loading_object)
+                {
+                    return false;
+                }
             }
 
             return true;
+        }
+
+        [HarmonyPatch(typeof(ZNetScene), "CreateObject")]
+        [HarmonyPrefix]
+        static void CreateObject_Prefix()
+        {
+            HMAPManager.loading_object = true;
+        }
+
+        [HarmonyPatch(typeof(ZNetScene), "CreateObject")]
+        [HarmonyPostfix]
+        static void CreateObject_Postfix()
+        {
+            HMAPManager.loading_object = false;
         }
     }
 }

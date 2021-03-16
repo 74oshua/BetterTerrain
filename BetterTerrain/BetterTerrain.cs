@@ -89,11 +89,8 @@ namespace BetterTerrain
             // reinitialize all destroyed TerrainModifiers
             // if they aren't reinitialized before saving, the TerrainModifiers will be removed from the game's save file, and the world will be incompatible with the vanilla game
             List<ZDO> save_clone = ZDOMan.instance.GetSaveClone();
-<<<<<<< HEAD
-            foreach (ZDO zdo in tm_zdos)
-=======
+
             foreach (ZDO zdo in TModManager.zdos_to_save)
->>>>>>> testing
             {
                 bool has_copy = false;
                 foreach (ZDO z in save_clone)
@@ -108,7 +105,6 @@ namespace BetterTerrain
                 if (!has_copy && !save_clone.Contains(zdo))
                 {
                     ZDOMan.instance.AddToSector(zdo, zdo.GetSector());
-                    UnityEngine.Debug.Log(zdo.m_uid);
                 }
             }
         }
@@ -146,18 +142,5 @@ namespace BetterTerrain
             HMAPManager.Reset();
             TModManager.Reset();
         }
-
-
-        /*[HarmonyPatch(typeof(ZNetScene), "Update")]
-        [HarmonyPrefix]
-        static void Update_Prefix()
-        {
-            destroy_tm_timer += Time.deltaTime;
-
-            if (destroy_tm_timer > 1f && HMAPManager.can_save)
-            {
-                destroy_tm_timer = 0f;
-            }
-        }*/
     }
 }
