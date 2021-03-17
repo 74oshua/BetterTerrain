@@ -221,7 +221,7 @@ namespace BetterTerrain
             }
             CalcTMods(ZoneSystem.instance.GetZone(zone.hmap.transform.position));
             zone.hmap.ApplyModifiers();
-            if (can_save)
+            if (can_save && zone.tmods.Count > 0)
             {
                 if (zone.heights.Count != zone.hmap.m_heights.Count)
                 {

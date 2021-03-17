@@ -21,6 +21,11 @@ namespace BetterTerrain
 
         public static void DeleteTMod(TerrainModifier modifier)
         {
+            if (!modifier.m_playerModifiction)
+            {
+                return;
+            }
+
             ZNetView znview = modifier.gameObject.GetComponent<ZNetView>();
             if (znview && znview.GetZDO() != null)
             {

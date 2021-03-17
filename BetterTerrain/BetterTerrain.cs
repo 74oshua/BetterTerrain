@@ -10,12 +10,12 @@ using UnityEngine;
 
 namespace BetterTerrain
 {
-    [BepInPlugin("org.bepinex.plugins.betterterrain", "Better Terrain", "0.1.11.0")]
+    [BepInPlugin("org.bepinex.plugins.betterterrain", "Better Terrain", "0.1.12.0")]
     public class BetterTerrain : BaseUnityPlugin
     {
         // major and minor version of BetterTerrain
         public static byte major = 0;
-        public static byte minor = 11;
+        public static byte minor = 12;
 
         // apply patches
         void Awake()
