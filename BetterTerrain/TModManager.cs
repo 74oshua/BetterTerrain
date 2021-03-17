@@ -10,21 +10,37 @@ namespace BetterTerrain
         public static void UpdateTMods()
         {
             // check for all unused tmods
-            List<TerrainModifier> remaining_tmods = new List<TerrainModifier>();
             foreach (BetterTerrain.ZoneInfo zone in HMAPManager.zone_info.Values)
             {
-                remaining_tmods.AddRange(zone.tmods.Except(zone.deletable_tmods));
+                tmods_to_remove.AddRange(zone.deletable_tmods);
+                tmods_to_remove = tmods_to_remove.Distinct().ToList();
             }
 
-            tmods_to_remove = TerrainModifier.m_instances.Except(remaining_tmods.Distinct().ToList()).ToList();
+            tmods_to_remove = tmods_to_remove.Except(already_removed).ToList();
+        }
+
+        public static void DeleteTMods()
+        {
+            // if this heightmap's zone has been loaded, save it's info in zone_info
+            int destroyed = 0;
+            for (int i = 0; i < tmods_to_remove.Count; i++)
+            {
+                if (tmods_to_remove[i] != null)
+                {
+                    destroyed++;
+                    DeleteTMod(tmods_to_remove[i]);
+                }
+                already_removed.Add(tmods_to_remove[i]);
+            }
         }
 
         public static void DeleteTMod(TerrainModifier modifier)
         {
-            if (!modifier.m_playerModifiction)
+            /*if (!modifier.m_playerModifiction)
             {
+                UnityEngine.Debug.LogWarning("Could not destroy " + modifier.m);
                 return;
-            }
+            }*/
 
             ZNetView znview = modifier.gameObject.GetComponent<ZNetView>();
             if (znview && znview.GetZDO() != null)
@@ -47,23 +63,15 @@ namespace BetterTerrain
                 // claim ownership of the TerrainModifier and destroy it
                 modifier.enabled = false;
                 znview.ClaimOwnership();
-                ZNetScene.instance.Destroy(modifier.gameObject);
-            }
-        }
 
-        public static void DeleteTMods()
-        {
-            // if this heightmap's zone has been loaded, save it's info in zone_info
-            int destroyed = 0;
-            for (int i = 0; i < tmods_to_remove.Count; i++)
-            {
-                if (tmods_to_remove[i] != null)
+                String[] names = { "mud_road(Clone)", "digg(Clone)", "path(Clone)" };
+                if (!names.Contains(modifier.name))
                 {
-                    //UnityEngine.Debug.Log("Deleting tmod in zone: (" + zone.x + ", " + zone.y + ")");
-                    destroyed++;
-                    DeleteTMod(tmods_to_remove[i]);
+                    UnityEngine.Debug.LogWarning("Deleting " + modifier.name);
                 }
-                tmods_to_remove.Remove(tmods_to_remove[i]);
+
+                UnityEngine.Debug.Log("Deleting " + modifier.name);
+                ZNetScene.instance.Destroy(modifier.gameObject);
             }
         }
 
@@ -75,5 +83,6 @@ namespace BetterTerrain
 
         public static List<ZDO> zdos_to_save = new List<ZDO>();
         public static List<TerrainModifier> tmods_to_remove = new List<TerrainModifier>();
+        public static List<TerrainModifier> already_removed = new List<TerrainModifier>();
     }
 }

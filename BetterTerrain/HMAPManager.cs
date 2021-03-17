@@ -192,6 +192,19 @@ namespace BetterTerrain
             }
             return;
         }
+
+        static public void CalcTMods(BetterTerrain.ZoneInfo zone)
+        {
+            foreach (TerrainModifier tmod in TerrainModifier.m_instances)
+            {
+                if (zone.hmap.TerrainVSModifier(tmod))
+                {
+                    zone.tmods.Add(tmod);
+                }
+            }
+            return;
+        }
+
         public static void RegenerateZone(Vector2i id)
         {
             if (!IsZoneKnown(id))
@@ -209,6 +222,8 @@ namespace BetterTerrain
                 return;
             }
 
+            CalcTMods(ZoneSystem.instance.GetZone(zone.hmap.transform.position));
+
             if (zone.saved)
             {
                 for (int i = 0; i < zone.hmap.m_heights.Count; i++)
@@ -219,10 +234,10 @@ namespace BetterTerrain
                 zone.hmap.m_clearedMask.Apply();
                 //UnityEngine.Debug.Log("loaded zone");
             }
-            CalcTMods(ZoneSystem.instance.GetZone(zone.hmap.transform.position));
             zone.hmap.ApplyModifiers();
-            if (can_save && zone.tmods.Count > 0)
+            if ((can_save || zone.saved) && zone.tmods.Count > 0)
             {
+                UnityEngine.Debug.Log("x");
                 if (zone.heights.Count != zone.hmap.m_heights.Count)
                 {
                     zone.heights = new List<float>(new float[zone.hmap.m_heights.Count]);
@@ -235,7 +250,11 @@ namespace BetterTerrain
                 zone.saved = true;
                 TModManager.UpdateTMods();
                 TModManager.DeleteTMods();
-                //UnityEngine.Debug.Log("saved zone");
+                UnityEngine.Debug.Log("saved zone");
+            }
+            else if (zone.saved)
+            {
+                UnityEngine.Debug.LogWarning("Couldn't save zone");
             }
         }
 
@@ -243,9 +262,12 @@ namespace BetterTerrain
         static public bool can_save = false;
         static public List<ZDO> all_tmod_zdos = new List<ZDO>();
         static public List<ZDO> checked_zdos = new List<ZDO>();
+        static public bool needs_to_update = true;
         static public float time_to_update = 1f;
         static public bool loading_object = false;
     }
+
+    // ------------------------------------------- PATCHES ------------------------------------------- //
 
     class Patches
     {
@@ -270,19 +292,11 @@ namespace BetterTerrain
         [HarmonyPostfix]
         static void CreateDestroyObjects_Postfix(ZNetScene __instance)
         {
-            HMAPManager.time_to_update -= Time.deltaTime;
-            if (HMAPManager.time_to_update > 0)
-            {
-                return;
-            }
-
-            HMAPManager.time_to_update = 0f;
-
             bool all_loaded = true;
-            Vector2i id = ZoneSystem.instance.GetZone(ZNet.instance.GetReferencePosition());
             int count = 0;
 
-            foreach (ZDO zdo in __instance.m_tempCurrentObjects)
+            List<ZDO> zdo_list = __instance.m_tempCurrentObjects;
+            foreach (ZDO zdo in zdo_list)
             {
                 GameObject prefab = ZNetScene.instance.GetPrefab(zdo.GetPrefab());
                 if (prefab.GetComponent<TerrainModifier>() != null)
@@ -297,43 +311,22 @@ namespace BetterTerrain
 
             if (all_loaded && !ZNetScene.instance.InLoadingScreen())
             {
-                if (!HMAPManager.can_save)
-                {
-                    foreach (BetterTerrain.ZoneInfo zone in HMAPManager.zone_info.Values)
-                    {
-                        if (zone.hmap != null)
-                        {
-                            HMAPManager.can_save = true;
-                            zone.hmap.Regenerate();
-                        }
-                    }
-                }
+                bool old = HMAPManager.can_save;
                 HMAPManager.can_save = true;
 
-                return;
-            }
-            HMAPManager.can_save = false;
-        }
-
-        [HarmonyPatch(typeof(ZoneSystem), "UpdateTTL")]
-        [HarmonyPrefix]
-        static void UpdateTTL_Prefix(float dt, ZoneSystem __instance)
-        {
-            foreach (KeyValuePair<Vector2i, ZoneSystem.ZoneData> zone in __instance.m_zones)
-            {
-                zone.Value.m_ttl += dt;
-            }
-            foreach (KeyValuePair<Vector2i, ZoneSystem.ZoneData> zone2 in __instance.m_zones)
-            {
-                if (zone2.Value.m_ttl > __instance.m_zoneTTL && !ZNetScene.instance.HaveInstanceInSector(zone2.Key))
+                if (!old)
                 {
-                    UnityEngine.Object.Destroy(zone2.Value.m_root);
-                    __instance.m_zones.Remove(zone2.Key);
-                    break;
+                    foreach (Heightmap hmap in Heightmap.m_heightmaps)
+                    {
+                        hmap.Regenerate();
+                    }
                 }
             }
+            else
+            {
+                HMAPManager.can_save = false;
+            }
         }
-
 
         [HarmonyPatch(typeof(Heightmap), "Generate")]
         [HarmonyPrefix]
@@ -395,50 +388,57 @@ namespace BetterTerrain
             // set heightmap zone and verify that it belongs to actual terrain data
             Vector2i zoneID = ZoneSystem.instance.GetZone(__instance.transform.position);
             BetterTerrain.ZoneInfo zone = HMAPManager.GetZoneInfo(zoneID);
-            if (zone != null && zone.game_object != null && zone.game_object == __instance.gameObject)
-            {
-                // if the tmod has already been applied, skip
-                if (zone.applied_tmods.Contains(modifier))
-                {
-                    bool can_delete = true;
-                    float radius = modifier.GetRadius();
 
-                    for (int y = -1; y <= 1; y++)
+            if (zone == null || modifier == null || __instance != zone.hmap)
+            {
+                return false;
+            }
+
+            // if the tmod has already been applied, skip
+            bool can_delete = true;
+            float modifier_radius = modifier.GetRadius();
+
+            for (int y = -1; y <= 1; y++)
+            {
+                for (int x = -1; x <= 1; x++)
+                {
+                    BetterTerrain.ZoneInfo check_zone = HMAPManager.GetZoneInfo(new Vector2i(zoneID.x + x, zoneID.y + y));
+                    if (check_zone != null)
                     {
-                        for (int x = -1; x <= 1; x++)
+                        foreach (TerrainModifier tmod in check_zone.tmods.Except(check_zone.applied_tmods))
                         {
-                            BetterTerrain.ZoneInfo check_zone = HMAPManager.GetZoneInfo(new Vector2i(zoneID.x + x, zoneID.y + y));
-                            if (check_zone != null)
+                            if (tmod != null)
                             {
-                                foreach (TerrainModifier tmod in check_zone.tmods.Except(check_zone.applied_tmods))
+                                float tmod_radius = tmod.GetRadius();
+                                float radius = Math.Max(tmod_radius, modifier_radius);
+
+                                if (tmod != modifier && Vector3.Distance(tmod.transform.position, modifier.transform.position) <= radius)
                                 {
-                                    if (tmod != null)
-                                    {
-                                        if (Vector3.Distance(tmod.transform.position, modifier.transform.position) <= radius)
-                                        {
-                                            can_delete = false;
-                                        }
-                                    }
+                                    UnityEngine.Debug.Log(Vector3.Distance(tmod.transform.position, modifier.transform.position));
+                                    can_delete = false;
                                 }
                             }
                         }
                     }
-                    if (can_delete)
-                    {
-                        zone.deletable_tmods.Add(modifier);
-                    }
-                    return false;
-                }
-
-                // mark modifier as applied
-                zone.applied_tmods.Add(modifier);
-
-                if (zone.saved && HMAPManager.loading_object)
-                {
-                    return false;
                 }
             }
+            if (can_delete)
+            {
+                zone.deletable_tmods.Add(modifier);
+            }
 
+            if (zone.saved && HMAPManager.loading_object)
+            {
+                return false;
+            }
+
+            if (zone.applied_tmods.Contains(modifier))
+            {
+                return false;
+            }
+
+            // mark modifier as applied
+            zone.applied_tmods.Add(modifier);
             return true;
         }
 
