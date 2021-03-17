@@ -25,9 +25,9 @@ namespace BetterTerrain
 			{
 				using (BinaryReader reader = new BinaryReader(new FileStream(BetterTerrain.db_path + ".hmap", FileMode.Open)))
 				{
-					HMAPManager.ReadHMAP(reader);
-				}
+				HMAPManager.ReadHMAP(reader);
 			}
+		}
 		}
 
 		[HarmonyPatch(typeof(ZDOMan), "PrepareSave")]
@@ -70,10 +70,8 @@ namespace BetterTerrain
 		[HarmonyPrefix]
 		private static void SaveASync_Prefix()
 		{
-			using (BinaryWriter writer = new BinaryWriter(new FileStream(BetterTerrain.db_path + ".hmap", FileMode.Create)))
-			{
-				HMAPManager.WriteHMAP(writer);
-			}
+			HMAPManager.WriteHMAP(writer);
+		}
 		}
 
 		[HarmonyPatch(typeof(ZNet), "Shutdown")]
