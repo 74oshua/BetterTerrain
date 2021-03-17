@@ -1,146 +1,60 @@
-﻿// Written by 74oshua
-
-using System;
-using System.IO;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Collections.Generic;
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
 
 namespace BetterTerrain
 {
-    [BepInPlugin("org.bepinex.plugins.betterterrain", "Better Terrain", "0.1.12.0")]
-    public class BetterTerrain : BaseUnityPlugin
-    {
-        // major and minor version of BetterTerrain
-        public static byte major = 0;
-        public static byte minor = 12;
+	[BepInPlugin("org.bepinex.plugins.betterterrain", "Better Terrain", "0.1.12.0")]
+	public class BetterTerrain : BaseUnityPlugin
+	{
+		public class ZoneInfo
+		{
+			public Heightmap hmap;
 
-        // apply patches
-        void Awake()
-        {
-            UnityEngine.Debug.Log("Starting BetterTerrain");
+			public List<float> heights = new List<float>();
 
-            Harmony.CreateAndPatchAll(typeof(BetterTerrain));
-            Harmony.CreateAndPatchAll(typeof(Patches));
-        }
+			public Color[] colors;
 
-        // contains information about a zone
-        public class ZoneInfo
-        {
-            public ZoneInfo()
-            {
-            }
+			public List<TerrainModifier> tmods = new List<TerrainModifier>();
 
-            public ZoneInfo(List<float> h, Color[] c)
-            {
-                heights = h;
-                colors = c;
-            }
+			public List<TerrainModifier> applied_tmods = new List<TerrainModifier>();
 
-            public Heightmap hmap;
+			public List<TerrainModifier> deletable_tmods = new List<TerrainModifier>();
 
-            public List<float> heights = new List<float>();
-            public Color[] colors;
+			public float ttu = 1f;
 
-            public List<TerrainModifier> tmods = new List<TerrainModifier>();
-            public List<TerrainModifier> applied_tmods = new List<TerrainModifier>();
-            public List<TerrainModifier> deletable_tmods = new List<TerrainModifier>();
-            public float ttu = 1;
-            public int num_tmods = 0;
-            public GameObject game_object;
-            public bool saved = false;
-            public bool generated = false;
-        }
-        
-        // <world save directory>/<name of world>
-        static String db_path = "";
+			public int num_tmods;
 
-        // timer for destruction of TerrainModifiers
-        static float destroy_tm_timer = 0;
+			public GameObject game_object;
 
-        [HarmonyPatch(typeof(ZNet), "LoadWorld")]
-        [HarmonyPrefix]
-        static void LoadWorld_Prefix(World ___m_world)
-        {
-            // get world save path
-            db_path = ___m_world.GetDBPath();
-            db_path = db_path.Substring(0, db_path.Length - 3);
-        }
+			public bool saved;
 
-        [HarmonyPatch(typeof(ZoneSystem), "Load")]
-        [HarmonyPrefix]
-        static void Load_Prefix()
-        {
-            if (File.Exists(db_path + ".hmap"))
-            {
-                using (BinaryReader reader = new BinaryReader(new FileStream(db_path + ".hmap", FileMode.Open)))
-                {
-                    HMAPManager.ReadHMAP(reader);
-                }
-            }
-        }
+			public bool generated;
 
-        [HarmonyPatch(typeof(ZDOMan), "PrepareSave")]
-        [HarmonyPrefix]
-        static void PrepareSave_Prefix()
-        {
-            // reinitialize all destroyed TerrainModifiers
-            // if they aren't reinitialized before saving, the TerrainModifiers will be removed from the game's save file, and the world will be incompatible with the vanilla game
-            List<ZDO> save_clone = ZDOMan.instance.GetSaveClone();
+			public bool has_location;
 
-            foreach (ZDO zdo in TModManager.zdos_to_save)
-            {
-                bool has_copy = false;
-                foreach (ZDO z in save_clone)
-                {
-                    if (z.m_uid == zdo.m_uid)
-                    {
-                        has_copy = true;
-                        break;
-                    }
-                }
+			public ZoneInfo()
+			{
+			}
 
-                if (!has_copy && !save_clone.Contains(zdo))
-                {
-                    ZDOMan.instance.AddToSector(zdo, zdo.GetSector());
-                }
-            }
-        }
+			public ZoneInfo(List<float> h, Color[] c)
+			{
+				heights = h;
+				colors = c;
+			}
+		}
 
-        [HarmonyPatch(typeof(ZDOMan), "SaveAsync")]
-        [HarmonyPostfix]
-        static void SaveAsync_Postfix()
-        {
-            // re-destroy TerrainModifiers
-            foreach (ZDO zdo in TModManager.zdos_to_save)
-            {
-                if (ZNetScene.instance.HaveInstance(zdo))
-                {
-                    ZDOMan.instance.RemoveFromSector(zdo, zdo.GetSector());
-                }
-            }
-        }
+		public static byte major = 0;
 
-        // saves zone_info into a .hmap file, see Load_Prefix() for .hmap format details
-        [HarmonyPatch(typeof(ZoneSystem), "SaveASync")]
-        [HarmonyPrefix]
-        static void SaveASync_Prefix()
-        {
-            using (BinaryWriter writer = new BinaryWriter(new FileStream(db_path + ".hmap", FileMode.Create)))
-            {
-                HMAPManager.WriteHMAP(writer);
-            }
-        }
+		public static byte minor = 12;
 
-        [HarmonyPatch(typeof(ZNet), "Shutdown")]
-        [HarmonyPostfix]
-        static void Shutdown_Postfix()
-        {
-            // clear any saved world data from memory
-            HMAPManager.Reset();
-            TModManager.Reset();
-        }
-    }
+		public static string db_path = "";
+
+		private void Awake()
+		{
+			Debug.Log("Starting BetterTerrain");
+			Harmony.CreateAndPatchAll(typeof(Patches));
+		}
+	}
 }
