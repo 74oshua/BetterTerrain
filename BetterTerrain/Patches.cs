@@ -23,8 +23,10 @@ namespace BetterTerrain
 		{
 			if (File.Exists(BetterTerrain.db_path + ".hmap"))
 			{
-				using BinaryReader reader = new BinaryReader(new FileStream(BetterTerrain.db_path + ".hmap", FileMode.Open));
-				HMAPManager.ReadHMAP(reader);
+				using (BinaryReader reader = new BinaryReader(new FileStream(BetterTerrain.db_path + ".hmap", FileMode.Open)))
+				{
+					HMAPManager.ReadHMAP(reader);
+				}
 			}
 		}
 
@@ -68,8 +70,10 @@ namespace BetterTerrain
 		[HarmonyPrefix]
 		private static void SaveASync_Prefix()
 		{
-			using BinaryWriter writer = new BinaryWriter(new FileStream(BetterTerrain.db_path + ".hmap", FileMode.Create));
-			HMAPManager.WriteHMAP(writer);
+			using (BinaryWriter writer = new BinaryWriter(new FileStream(BetterTerrain.db_path + ".hmap", FileMode.Create)))
+			{
+				HMAPManager.WriteHMAP(writer);
+			}
 		}
 
 		[HarmonyPatch(typeof(ZNet), "Shutdown")]
