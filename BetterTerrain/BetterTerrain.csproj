@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <OutputPath>D:\Steam\steamapps\common\Valheim\BepInEx\plugins\BetterTerrain\</OutputPath>
+    <OutputPath>bin\</OutputPath>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
@@ -17,25 +17,25 @@
 
   <ItemGroup>
     <Reference Include="0Harmony">
-      <HintPath>..\..\..\Libs\0Harmony.dll</HintPath>
+      <HintPath>\Libs\0Harmony.dll</HintPath>
     </Reference>
     <Reference Include="assembly_utils">
-      <HintPath>..\..\..\Libs\assembly_utils.dll</HintPath>
+      <HintPath>\Libs\assembly_utils.dll</HintPath>
     </Reference>
     <Reference Include="assembly_valheim">
-      <HintPath>..\..\..\Libs\assembly_valheim.dll</HintPath>
+      <HintPath>\Libs\assembly_valheim.dll</HintPath>
     </Reference>
     <Reference Include="BepInEx">
-      <HintPath>..\..\..\Libs\BepInEx.dll</HintPath>
+      <HintPath>\Libs\BepInEx.dll</HintPath>
     </Reference>
     <Reference Include="BepInEx.Harmony">
-      <HintPath>..\..\..\Libs\BepInEx.Harmony.dll</HintPath>
+      <HintPath>\Libs\BepInEx.Harmony.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine">
-      <HintPath>..\..\..\Libs\UnityEngine.dll</HintPath>
+      <HintPath>\Libs\UnityEngine.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath>..\..\..\Libs\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>\Libs\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
   </ItemGroup>
 
